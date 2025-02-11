@@ -29,12 +29,37 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "nrf24l01.h"
+#include "dshot.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+typedef enum {
+  DeviceIdent,
+  DeviceConnect,
+  ChannelCount = 0x10,
+  ChannelMode,
+  ChannelValue,
+} CommandByte;
 
+typedef struct rfpackage_template
+{
+  uint8_t command;
+  uint8_t mac0_dshotcount_chmode_targetch;
+  union
+  {
+    struct
+    {
+      uint8_t mac1_docount_val0;
+      uint8_t mac2_val1;
+    };
+    uint16_t value;
+  };
+  
+  uint8_t mac3;
+  uint8_t mac4;
+};
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -50,7 +75,14 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
+nrf24l01 nrf;
+static uint8_t rxBuffer[32];
+static uint8_t txBuffer[32];
 
+static uint8_t mac[5];
+const static uint8_t broadcastMac[5] = {0xab, 0xbc, 0xcd, 0xde, 0xef};
+
+uint16_t motorValue[4] = {0, 0, 0, 0};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -62,7 +94,25 @@ void MX_FREERTOS_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+  if (GPIO_Pin == NRF_IRQ_Pin)
+  {
+    nrf_irq_handler(&nrf);
+  }
+}
 
+void nrf_packet_received_callback(nrf24l01* dev, uint8_t* data) 
+{
+  // 处理协议  
+  dev->rx_busy = 0;
+}
+
+void flycontrol_SetChannelOutput(uint8_t channel, uint16_t value)
+{
+  motorValue[channel] = value;
+  dshot_write(motorValue);
+}
 /* USER CODE END 0 */
 
 /**
@@ -73,7 +123,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
+  
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -95,7 +145,6 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_DMA_Init();
-  MX_ADC1_Init();
   MX_ADC2_Init();
   MX_SPI1_Init();
   MX_TIM1_Init();
@@ -104,8 +153,31 @@ int main(void)
   MX_USART1_UART_Init();
   MX_I2C1_Init();
   MX_TIM2_Init();
+  MX_TIM5_Init();
   /* USER CODE BEGIN 2 */
+  nrf24l01_config config;
+  config.data_rate = NRF_DATA_RATE_250KBPS;
+  config.tx_power = NRF_TX_PWR_0dBm;
+  config.crc_width = NRF_CRC_WIDTH_1B;
+  config.addr_width = NRF_ADDR_WIDTH_5;
+  config.payload_length = 32;
+  config.retransmit_count = 5;
+  config.retransmit_delay = 0x0f;
+  config.rf_channel = 0x2b;
+  config.rx_address = mac;
+  config.tx_address = broadcastMac;
+  config.rx_buffer = rxBuffer;
+  config.spi = &hspi1;
+  config.irq_pin = NRF_IRQ_Pin;
+  config.irq_port = NRF_IRQ_GPIO_Port;
+  config.ce_pin = NRF_CE_Pin;
+  config.ce_port = NRF_CE_GPIO_Port;
+  config.csn_pin = NRF_CS_Pin;
+  config.csn_port = NRF_CS_GPIO_Port;
+  nrf_init(&nrf, &config);
+  dshot_init(DSHOT600);
 
+  nrf_push_packet(&nrf, (uint8_t*)"Hello World");
   /* USER CODE END 2 */
 
   /* Init scheduler */
