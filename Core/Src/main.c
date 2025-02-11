@@ -51,7 +51,7 @@ typedef struct rfpackage_template
   {
     struct
     {
-      uint8_t mac1_docount_val0;
+      uint8_t mac1_chcount_val0;
       uint8_t mac2_val1;
     };
     uint16_t value;
